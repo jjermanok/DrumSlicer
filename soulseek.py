@@ -84,6 +84,12 @@ def matches(path: str, artist: str, title: str, need_artist: bool) -> bool:
         return False
     if need_artist and artist and not set(words(artist)) <= set(words(path)):
         return False
+    # "Bonobo - Migration - 08 - Kerala": with a track number, the title must come after it, or
+    # an album name earlier in the file name passes for the song ("Migration"). The first
+    # number counts, so titles that start with one still match ("03-christian_loffler-7_tepe").
+    numbered = list(re.finditer(r"(?:^|[\s_.-])\d{1,2}[\s._-]+", stem))
+    if numbered and not set(title_w) <= set(words(stem[numbered[0].end():])):  # after the first number
+        return False
     extras = _extra_words(stem, artist, title)
     names_artist = bool(artist) and set(words(artist)) <= name_w
     if len(extras) > (6 if names_artist else 1):
