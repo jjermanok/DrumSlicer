@@ -74,17 +74,15 @@ Part loops also go to Apple Loops under `Drum Sampler/<Artist>/<part>/`. Options
 Once a song's one-shots, loops and drum parts are all cut, its full drum stem and its drum-part stems are **deleted** to save space (~75 MB per song). Each artist folder keeps a hidden `.drum_sampler/` folder with small records per song (bar grid, kept parts, a "sliced" marker), so a song is never separated again. `--keep-drum-stem` / `--keep-part-stems` keep them. `--split-existing` runs only DrumSep + part slicing (and the stem clean-up) on songs already in the library. Tested against LarsNet on live, electronic and pop drums; DrumSep separated snares and hats far better.
 
 ## Storage
-Samples (one-shots, loops, drum-part samples, vocal phrases, Apple Loops) stay on the Mac so Logic and Ableton load them instantly: ~55 MB per song.
-The full-length stems you rarely open — the song without drums and the acapella, ~80 MB per song — go to **iCloud Drive/DrumSlicer Stems/<Artist>/{no_drums,acapellas}/**. Once uploaded they're evicted from the Mac (`brctl evict`): still visible in Finder, downloaded when opened, no local space used. Without iCloud Drive they stay in a local `stems/` folder. Drum and drum-part stems are deleted after slicing.
-Source mp3s are preferred over FLAC when downloading (a third of the size, no audible difference after separation). Don't use MP3 for samples: encoders pad the start with silence, which shifts attacks and breaks sample-exact loops.
+Measured per song, as FLAC: no-drums ~42 MB, vocals ~38 MB, drum-part samples ~30 MB, one-shots + loops ~10 MB, Apple Loops ~12 MB — about **130 MB per song** (drum and drum-part stems are deleted after slicing). Source mp3s are preferred over FLAC when downloading (a third of the size, no audible difference after separation). Don't use MP3 for samples: encoders pad the start with silence, which shifts attacks and breaks sample-exact loops.
 
 ## Vocals
 With Demucs (the default), each song's vocals are separated too and kept in their own library next to the drums:
 ```
 vocal_samples/
   ROSALÍA/
-    phrases/     reliquia_phrase_001.flac  cut at the pauses, 0.5-12 s, repeats removed
-iCloud Drive/DrumSlicer Stems/ROSALÍA/acapellas/reliquia.flac   the full vocal track
+    acapellas/   reliquia.wav              the full vocal track
+    phrases/     reliquia_phrase_001.wav   cut at the pauses, 0.5-12 s, repeats removed
 ```
 Songs without singing are skipped: a song counts as vocal if the vocal track is within 12 dB of the full song for at least 15 s (instrumentals measure 0-1 s, Reliquia 144 s). Skipped songs are listed in `vocal_samples/.no_vocals.txt`. Songs already separated for drums only get the vocals step (~20 s).
 Always saved to `vocal_samples/` next to the drum library. Options: `--no-vocals`, `--max-vocal-phrases 24`, `--vocal-similarity 0.85` (lower = fewer, more varied phrases).
