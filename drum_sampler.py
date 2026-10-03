@@ -12,7 +12,8 @@ Output layout (artist and title come from the file's tags, else its name):
   <out>/<Artist>/oneshots/kicks/<song>_001.flac   (also snares_claps, hats, cymbals, percussion)
   <out>/<Artist>/loops/<song>_<bpm>bpm_2bar_001.flac
   <out>/<Artist>/drum_stems/<song>.flac           cached, so re-runs don't redo the separation
-  <out>/<Artist>/no_drum_stems/<song>.flac        the song with the drums removed
+  iCloud Drive/DrumSlicer Stems/<Artist>/no_drums/<song>.flac    the song with the drums removed
+  iCloud Drive/DrumSlicer Stems/<Artist>/acapellas/<song>.flac   the vocals (see icloud.py)
 Everything is 24-bit FLAC: lossless (identical to WAV), about half the size, read by Logic and
 Ableton. Older .wav files in a library are still recognised.
 
@@ -176,7 +177,9 @@ def bar_grid_for(info: Song, stem: Path, out: Path) -> dict | None:
             downbeats.save_grid(stem, grid, "full mix")
             return grid
         d, sr = librosa.load(stem, sr=22050, mono=True)
-        base = info.dir(out) / "no_drum_stems"
+        import icloud
+
+        base = icloud.stems_root(out) / info.artist / "no_drums"
         for rest_path in (audio_file(base, info.name), audio_file(base, f"{info.name}_excerpt")):
             if rest_path.exists():
                 rest, _ = librosa.load(rest_path, sr=sr, mono=True)
@@ -190,8 +193,12 @@ def bar_grid_for(info: Song, stem: Path, out: Path) -> dict | None:
     return None
 
 
-def vocal_paths(info: Song, vocals_dir: Path) -> tuple[Path, Path]:
-    """(acapella, phrases folder) for a song, under the separate vocals library."""
+def vocal_paths(info: Song, vocals_dir: Path, stems: Path) -> tuple[Path, Path]:
+    """(acapella, phrases folder): the acapella lives with the other full-length stems
+    (iCloud Drive), the phrases in the vocals library on the Mac."""
+    import icloud
+
+    return icloud.acapella_path(stems, info.artist, info.name), vocals_dir / info.artist / "phrases"
     base = vocals_dir / info.artist
     return audio_file(base / "acapellas", info.name), base / "phrases"
 
@@ -200,20 +207,23 @@ def _no_vocals_registry(vocals_dir: Path) -> Path:
     return vocals_dir / ".no_vocals.txt"
 
 
-def demucs_stems(songs: list[Song], out: Path, vocals_dir: Path | None = None) -> dict[Path, Path]:
+def demucs_stems(songs: list[Song], out: Path, vocals_dir: Path | None = None,
+                 stems: Path | None = None) -> dict[Path, Path]:
     """Separate each song on this Mac with Demucs (free). Whole song every time, so there's no
     need for the one-loop excerpt check. Existing stems (from either separator) are reused; a
     song that already has drums only gets its vocals separated. Songs found to have no vocals
     are listed in <vocals_dir>/.no_vocals.txt so they aren't checked again."""
+    import icloud
     import local_split
 
+    stems = stems or icloud.stems_root(out)
     results: dict[Path, Path] = {}
     registry = _no_vocals_registry(vocals_dir) if vocals_dir else None
     no_vocals = set(registry.read_text().splitlines()) if registry and registry.exists() else set()
     for info in songs:
         dest = audio_file(info.dir(out) / "drum_stems", info.name)
         key = f"{info.artist}/{info.name}"
-        acapella = vocal_paths(info, vocals_dir)[0] if vocals_dir else None
+        acapella = vocal_paths(info, vocals_dir, stems)[0] if vocals_dir else None
         need_drums = not dest.exists() and not sliced_marker(dest).exists()
         need_vocals = bool(acapella) and not acapella.exists() and key not in no_vocals
         if not need_drums and not need_vocals:
@@ -225,7 +235,7 @@ def demucs_stems(songs: list[Song], out: Path, vocals_dir: Path | None = None) -
         t0 = time.time()
         try:
             found = local_split.write_stems(info.path, dest if need_drums else None,
-                                            info.dir(out) / "no_drum_stems" / f"{info.name}{EXT}",
+                                            icloud.no_drums_path(stems, info.artist, info.name),
                                             acapella if need_vocals else None)
         except Exception as e:
             log(f"[error] {info.path.name}: Demucs failed: {e}")
@@ -357,7 +367,9 @@ def extract_drum_stems(songs: list[Song], out: Path, client: Lalal, args, poll_s
                     results[song] = dest
                 if back is not None:
                     suffix = "_excerpt" if excerpt else ""
-                    client.download(back["url"], song_info_.dir(out) / "no_drum_stems" / f"{song_info_.name}{suffix}{EXT}")
+                    import icloud
+                    client.download(back["url"], icloud.no_drums_path(icloud.stems_root(out), song_info_.artist,
+                                                                       f"{song_info_.name}{suffix}"))
                     log(f"[done] {song.name}: no-drums track saved")
                 client.delete(source_id)
                 del pending[task_id]
@@ -429,6 +441,7 @@ def folder_name(artist: str) -> str:
 
 
 def song_info_for(path: Path, query: str | None, out: Path) -> Song:
+    import icloud
     """For a song requested as "Artist - Title" (songs.txt / a playlist), name its folder and
     files after that request rather than the downloaded file's tags, which are often missing
     or wrong ("https_djsoundtop.com", title in the artist field, "Above" for Above & Beyond).
@@ -446,6 +459,12 @@ def song_info_for(path: Path, query: str | None, out: Path) -> Song:
                         ("no_drum_stems", ".wav"), ("no_drum_stems", ".flac")):
         old_f = info.dir(out) / sub / f"{info.name}{suffix}"
         new_f = new.dir(out) / sub / f"{new.name}{suffix}"
+        if old_f.exists() and not new_f.exists() and old_f != new_f:
+            new_f.parent.mkdir(parents=True, exist_ok=True)
+            old_f.replace(new_f)
+    store = icloud.stems_root(out)
+    for old_f, new_f in ((icloud.no_drums_path(store, info.artist, info.name), icloud.no_drums_path(store, new.artist, new.name)),
+                         (icloud.acapella_path(store, info.artist, info.name), icloud.acapella_path(store, new.artist, new.name))):
         if old_f.exists() and not new_f.exists() and old_f != new_f:
             new_f.parent.mkdir(parents=True, exist_ok=True)
             old_f.replace(new_f)
@@ -857,6 +876,8 @@ def main() -> None:
     out = Path(args.out).expanduser()
     use_vocals = args.vocals and args.separator == "demucs" and not args.already_drums
     args.vocals_dir = out.parent / "vocal_samples" if use_vocals else None  # always next to the drum library
+    import icloud
+    args.stems_dir = icloud.stems_root(out)  # full-length stems: iCloud Drive (evicted after upload)
     if args.already_drums:
         args.drum_parts = False  # the "stem" is the user's own file; don't write records next to it
     if args.split_existing:
@@ -906,6 +927,7 @@ def main() -> None:
         if songs_file and q and n_os + n_lp > 0:
             remove_from_list(songs_file, q)
             log(f"[list] removed '{q}' from {songs_file.name}")
+    evict_stems(args)
     log(f"\nDone: {grand_os} one-shots, {grand_lp} loops -> {out}")
 
 
@@ -1048,12 +1070,25 @@ def slice_song(info: Song, stem: Path, out: Path, args) -> tuple[str, str, int, 
         n_parts = slice_parts(info, stem, out, args, grid if grid else (None if args.already_drums else bar_grid_for(info, stem, out)))
     n_vx = 0
     if args.vocals_dir:
-        acapella, phrases = vocal_paths(info, args.vocals_dir)
-        if acapella.exists():
+        acapella, phrases = vocal_paths(info, args.vocals_dir, args.stems_dir)
+        existing_vx = audio_glob(phrases, f"{info.name}_phrase_[0-9][0-9][0-9]")
+        if existing_vx and not args.reslice:
+            n_vx = len(existing_vx)  # keep them; don't pull the acapella back from iCloud
+        elif acapella.exists():
             n_vx = export_vocal_phrases(acapella, info.name, phrases, args)
     log(f"[slice] {info.artist} / {info.name}: {n_os} one-shots, {n_lp} loops" + (f" @ {tempo:g} BPM" if tempo else "")
         + (f", {n_parts} drum-part samples" if n_parts else "") + (f", {n_vx} vocal phrases" if n_vx else ""))
     return info.artist, info.name, n_os, n_lp, tempo, n_vx
+
+
+def evict_stems(args) -> None:
+    """Free the Mac's copy of full-length stems that have finished uploading to iCloud Drive."""
+    import icloud
+
+    n, freed = icloud.evict_uploaded(args.stems_dir)
+    if n:
+        log(f"[icloud] {n} stems uploaded and removed from this Mac ({freed / 1e9:.1f} GB freed); "
+            f"they stay in iCloud Drive/DrumSlicer Stems")
 
 
 def run_parts_pass(out: Path, args) -> None:
@@ -1157,7 +1192,7 @@ def run_pipeline(songs: list[Path], queries: list[str], songs_file: Path | None,
                 continue
             seen.add(path)
             info = song_info_for(path, q, out)
-            stem = demucs_stems([info], out, args.vocals_dir).get(path)
+            stem = demucs_stems([info], out, args.vocals_dir, args.stems_dir).get(path)
             if stem is None:
                 continue
             bar_grid_for(info, stem, out)  # on the GPU here, so the workers only read the saved grid
@@ -1168,6 +1203,7 @@ def run_pipeline(songs: list[Path], queries: list[str], songs_file: Path | None,
         if not seen:
             sys.exit("No input audio files found.")
         log(f"[pipeline] all songs separated; waiting for {sum(not f.done() for f in futures)} to finish slicing")
+    evict_stems(args)
     log(f"\nDone: {totals[0]} one-shots, {totals[1]} loops -> {out}"
         + (f"\n      {totals[2]} vocal phrases -> {args.vocals_dir}" if args.vocals_dir else ""))
 
