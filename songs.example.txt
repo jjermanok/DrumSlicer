@@ -1,0 +1,7 @@
+# One song per line: Artist - Title
+# Copy to songs.txt, then run with no arguments to process the list:
+#   ./.venv/bin/python drum_sampler.py -o drum_samples
+# Songs not found on this Mac are downloaded from Soulseek (SLSK_USERNAME / SLSK_PASSWORD).
+# Each song is removed from songs.txt once its samples are in the library.
+Bonobo - Kerala
+Four Tet - Baby

@@ -1,0 +1,8 @@
+librosa>=0.10
+soundfile>=0.12
+numpy
+requests
+mutagen
+aioslsk==1.5.0
+demucs
+beat_this @ git+https://github.com/CPJKU/beat_this.git

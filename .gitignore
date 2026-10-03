@@ -1,0 +1,20 @@
+# environment
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# generated libraries and audio (large, personal)
+drum_samples/
+vocal_samples/
+comparison_*/
+test_pack*/
+*.part
+*.part.*
+*.wav
+*.flac
+*.mp3
+*.caf
+
+# personal song list (see songs.example.txt)
+songs.txt
