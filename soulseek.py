@@ -110,7 +110,7 @@ def _tag_artists(path: str) -> str:
 
 
 def find_local(query: str, roots: list[Path]) -> Path | None:
-    for ext in (".mp3", ".flac"):
+    for ext in (".mp3", ".flac", ".m4a", ".wav", ".aiff", ".aif"):  # mp3 preferred; others if that is all there is
         found = _find_local(query, roots, ext)
         if found:
             return found
